@@ -160,11 +160,12 @@ prompt_motd() {
 	strftime -s hour %H $EPOCHSECONDS # Get hour of day
 	local greeting
 	# Display a greeting for the time of day. A random greeting is chosen from the array.
-	(( $hour >= 3  && $hour <= 6  )) && greeting=(Yawn "Rise and shine" "Back to bed?")
-	(( $hour >= 6  && $hour <= 12 )) && greeting=("Good morning" Morning Hello Hi)
-	(( $hour >= 12 && $hour <= 18 )) && greeting=("Good afternoon" Afternoon Greetings Hi Howdy Yo)
-	(( $hour >= 18 && $hour <= 3  )) && greeting=("Good evening" Evening "What's up" Hey Yo)
-	print "$greeting[RANDOM % $#greeting + 1] $USERNAME welcome to zsh $ZSH_VERSION"
+	(($hour >= 1  && $hour <= 4)) && greeting=(Yawn "Back to bed?")
+	(($hour >= 4  && $hour <= 6)) && greeting=("Good morning" "Rise and shine")
+	(($hour >= 6  && $hour <= 12)) && greeting=("Good morning" Morning Hello Hi)
+	(($hour >= 12 && $hour <= 18)) && greeting=("Good afternoon" Afternoon Greetings Hi Howdy Yo)
+	(($hour >= 18 && $hour <= 24)) && greeting=("Good evening" Evening "What's up" Hey Yo)
+	print "$greeting[RANDOM % $#greeting + 1] $USERNAME welcome to zsh"
 	# Show todo.txt todo list
 	local todotxt="$ZSH"/todo.txt/todo.txt
 	[[ -f "$todotxt" &&  -s "$todotxt" ]] && { print TODO: && <"$todotxt" }
