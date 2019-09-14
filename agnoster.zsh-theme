@@ -1,173 +1,275 @@
-# vim:ft=zsh ts=2 sw=2 sts=2
-#
-# agnoster's Theme - https://gist.github.com/3712874
-# A Powerline-inspired theme for ZSH
-#
-# # README
-#
-# In order for this theme to render correctly, you will need a
-# [Powerline-patched font](https://gist.github.com/1595572).
-#
-# In addition, I recommend the
-# [Solarized theme](https://github.com/altercation/solarized/) and, if you're
-# using it on Mac OS X, [iTerm 2](http://www.iterm2.com/) over Terminal.app -
-# it has significantly better color fidelity.
-#
-# # Goals
-#
-# The aim of this theme is to only show you *relevant* information. Like most
-# prompts, it will only show git information when in a git working directory.
-# However, it goes a step further: everything from the current user and
-# hostname to whether the last call exited with an error to whether background
-# jobs are running in this shell will all be displayed automatically when
-# appropriate.
-
-### Segments of the prompt, default order declaration
-
-typeset -aHg AGNOSTER_PROMPT_SEGMENTS=(
-    prompt_status
-    prompt_context
-    prompt_virtualenv
-    prompt_dir
-    prompt_git
-    prompt_end
-)
-
-### Segment drawing
-# A few utility functions to make it easy and re-usable to draw segmented prompts
-
-CURRENT_BG='NONE'
-if [[ -z "$PRIMARY_FG" ]]; then
-	PRIMARY_FG=black
-fi
-
-# Characters
-SEGMENT_SEPARATOR="\ue0b0"
-PLUSMINUS="\u00b1"
-BRANCH="\ue0a0"
-DETACHED="\u27a6"
-CROSS="\u2718"
-LIGHTNING="\u26a1"
-GEAR="\u2699"
+# Adapted from agnoster ZSH theme https://github.com/agnoster/agnoster-zsh-theme
 
 # Begin a segment
-# Takes two arguments, background and foreground. Both can be omitted,
-# rendering default background/foreground.
+# Takes two arguments, background and foreground. If omitted, renders default background/foreground.
 prompt_segment() {
-  local bg fg
-  [[ -n $1 ]] && bg="%K{$1}" || bg="%k"
-  [[ -n $2 ]] && fg="%F{$2}" || fg="%f"
-  if [[ $CURRENT_BG != 'NONE' && $1 != $CURRENT_BG ]]; then
-    print -n "%{$bg%F{$CURRENT_BG}%}$SEGMENT_SEPARATOR%{$fg%}"
-  else
-    print -n "%{$bg%}%{$fg%}"
-  fi
-  CURRENT_BG=$1
-  [[ -n $3 ]] && print -n $3
+	[ -n "$SSH_CLIENT" ] && typeset -g SEGMENT_SEPARATOR='\u27e9' || typeset -g SEGMENT_SEPARATOR='\ue0b0'
+	local bg fg
+	[ -n $1 ] && bg="%K{$1}" || bg="%k"
+	[ -n $2 ] && fg="%F{$2}" || fg="%f"
+	if [[ -n $CURRENT_BG && $1 != "$CURRENT_BG" ]]; then
+		[ -n "$SSH_CLIENT" ] && print -n " %{$bg%F{$1}%}$SEGMENT_SEPARATOR%{$fg%} " || print -n " %{$bg%F{$CURRENT_BG}%}$SEGMENT_SEPARATOR%{$fg%} "
+	else
+		[[ "$USER" = "$DEFAULTUSER" && -z "$SSH_CLIENT" ]] && print -n "%{$bg%}%{$fg%} " || print -n "%{$bg%}%{$fg%}"
+	fi
+	typeset -g CURRENT_BG=$1
+	[ -n $3 ] && echo -n "$3"
 }
 
-# End the prompt, closing any open segments
+# Begin an rprompt segment
+prompt_rsegment() {
+	[ -n "$SSH_CLIENT" ] && typeset -g RSEGMENT_SEPARATOR='\u27e8' || typeset -g RSEGMENT_SEPARATOR='\ue0b2'
+	local bg fg
+	[ -n $1 ] && bg="%K{$1}" || bg="%k"
+	[ -n $2 ] && fg="%F{$2}" || fg="%f"
+	if [[ -n $CURRENT_BG && $1 != "$CURRENT_BG" ]]; then
+		print -n "%{%K{$CURRENT_BG}%F{$1}%}$RSEGMENT_SEPARATOR%{$bg%}%{$fg%} "
+	else
+		print -n "%F{$1}%{%K{default}%}$RSEGMENT_SEPARATOR%{$bg%}%{$fg%} "
+	fi
+	typeset -g CURRENT_BG=$1
+	[ -n $3 ] && echo -n "$3"
+	print -n "%E" # Draw segment over space at rprompt EOL
+}
+
+# End the prompt closing any open segments and set the prompt
 prompt_end() {
-  if [[ -n $CURRENT_BG ]]; then
-    print -n "%{%k%F{$CURRENT_BG}%}$SEGMENT_SEPARATOR"
-  else
-    print -n "%{%k%}"
-  fi
-  print -n "%{%f%}"
-  CURRENT_BG=''
+	[ -n $CURRENT_BG ] && print -n " %{%k%F{$CURRENT_BG}%}$SEGMENT_SEPARATOR" || print -n "%{%k%}"
+	if [[ -n "$RPROMPT_RETURN" || $retcode -eq 0 ]]; then
+		print -n "%{%f%} %# "
+	else
+		print -n "%F{9} %# %f"
+	fi
+	unset CURRENT_BG
 }
 
-### Prompt components
-# Each component will draw itself, and hide itself if no information needs to be shown
+# End rprompt closing any open segments
+prompt_rend() {
+	[ -n $CURRENT_BG ] && print -n "%{%k%}"
+	unset CURRENT_BG
+}
 
-# Context: user@hostname (who am I and where am I)
+# User and hostname
 prompt_context() {
-  local user=`whoami`
-
-  if [[ "$user" != "$DEFAULT_USER" || -n "$SSH_CONNECTION" ]]; then
-    prompt_segment $PRIMARY_FG default " %(!.%{%F{yellow}%}.)$user@%m "
-  fi
+	[ -n "$SSH_CLIENT" ] && prompt_segment black default "%n@%m" && return # SSH - User and hostname
+	[ "$USER" != "$DEFAULTUSER" ] && prompt_segment black default "%n" # Other user - Show user
 }
 
-# Git: branch/detached head, dirty status
-prompt_git() {
-  local color ref
-  is_dirty() {
-    test -n "$(git status --porcelain --ignore-submodules)"
-  }
-  ref="$vcs_info_msg_0_"
-  if [[ -n "$ref" ]]; then
-    if is_dirty; then
-      color=yellow
-      ref="${ref} $PLUSMINUS"
-    else
-      color=green
-      ref="${ref} "
-    fi
-    if [[ "${ref/.../}" == "$ref" ]]; then
-      ref="$BRANCH $ref"
-    else
-      ref="$DETACHED ${ref/.../}"
-    fi
-    prompt_segment $color $PRIMARY_FG
-    print -n " $ref"
-  fi
-}
-
-# Dir: current working directory
+# Current directory
 prompt_dir() {
-  prompt_segment blue $PRIMARY_FG ' %~ '
+	# Truncated paths from shrinkpath function
+	# local trunc="%(4~|%-~/…/%2~|%~)" # Old truncate expression
+	[ -n "$SSH_CLIENT" ] && prompt_segment default default $(_shrinkpath) && return
+	if [ ! -w "${PWD}" ]; then # Directory not writable
+		prompt_segment cyan black "$(_shrinkpath) \uf023" # lock icon
+	else
+		prompt_segment cyan black $(_shrinkpath)
+	fi
 }
 
-# Status:
-# - was there an error
-# - am I root
-# - are there background jobs?
+# Virtual environment name
+prompt_venv() {
+	if [ -n "$PROMPT_VENV" ]; then
+		[ -n "$VIRTUAL_ENV" ] && prompt_segment cyan black "[${VIRTUAL_ENV##*/}]"
+	fi
+}
+
+# Git dirty/clean status, tracking and local status with gitprompt async plugin
+prompt_git() {
+	(($+commands[git])) || return # Stop host without git from continuing
+	[ $UID -eq 0 ] && return # No git prompt for root user
+	if [ -n "$PROMPT_GIT" ] && \
+		command git rev-parse --is-inside-work-tree >/dev/null 2>&1; then # Within git directory only
+		local gitdirty
+		read -r gitdirty < <(git status -s)
+		if [[ -n $gitdirty ]]; then # Dirty
+			[ -n "$SSH_CLIENT" ] && print -n " %F{yellow}%}$(gitprompt)%{%f%}" && return
+			prompt_segment yellow black
+		else # Clean
+			[ -n "$SSH_CLIENT" ] && print -n " %F{green}%}$(gitprompt)%{%f%}" && return
+			prompt_segment green black
+		fi
+		if [[ -e "./.git/BISECT_LOG" ]]; then
+			print -n "\uf977$(gitprompt)" # script icon
+		elif [[ -e "./.git/MERGE_HEAD" ]]; then
+			print -n "\ue727 $(gitprompt)" # merge icon
+		elif [[ -e "./.git/rebase" || -e "./.git/rebase-apply" || -e "./.git/rebase-merge" || -e "./.git/../.dotest" ]]; then
+			print -n "\uf1c0 $(gitprompt)" # database icon
+		else
+			print -n "\ue725 $(gitprompt)" # branch icon
+		fi
+	fi
+}
+
+# Return code, cmd time, history line, job status, clock
 prompt_status() {
-  local symbols
-  symbols=()
-  [[ $RETVAL -ne 0 ]] && symbols+="%{%F{red}%}$CROSS"
-  [[ $UID -eq 0 ]] && symbols+="%{%F{yellow}%}$LIGHTNING"
-  [[ $(jobs -l | wc -l) -gt 0 ]] && symbols+="%{%F{cyan}%}$GEAR"
-
-  [[ -n "$symbols" ]] && prompt_segment $PRIMARY_FG default " $symbols "
+	[ -n "$RPROMPT_ON" ] || return
+   local symbols=()
+	if [[ -n "$RPROMPT_RETURN" && -n $retcode && $retcode -ne 0 ]]; then # Return code
+		[ -n "$RPROMPT_RETURNSIG" ] && prompt_retsig
+		[ -n "$SSH_CLIENT" ] && prompt_rsegment default 1 "\u21aa$retcode " || prompt_rsegment 1 11 "\u21aa$retcode "
+	fi
+	if [[ -n "$RPROMPT_CMDTIME" && -z $nocmdtime ]]; then # Command time (nocmdtime from accept-line widget)
+		[ -n "$SSH_CLIENT" ] && local clockicon='' || local clockicon='\uf017 '
+		[[ $timer_result -ge 3 && $timer_result -lt 15 ]] && symbols+=("%F{249}$clockicon${timer_result}s")
+		[[ $timer_result -ge 15 ]] && symbols+=("%F{249}$clockicon%F{9}${timer_result}s") # Red time
+	fi
+	if [ -n "$RPROMPT_HISTORY" ]; then # History line
+		[ -n "$SSH_CLIENT" ] && prompt_rsegment default default "%h " || prompt_rsegment 245 default "%h "
+	fi
+	[ -n "$RPROMPT_CLOCK" ] && symbols+=("%F{249}%*") # 24H clock
+	if [ -n "$SSH_CLIENT" ]; then
+		symbols+=([$jobnum])
+	else
+		[ "$jobnum" -eq 1 ] && symbols+=("%F{252}\uf013%f") # 1 job
+		[ "$jobnum" -gt 1 ] && symbols+=("%F{252}\uf085%f") # >1 job
+	fi
+	if [ -n "${symbols[*]}" ]; then
+		[ -n "$SSH_CLIENT" ] && prompt_rsegment default default "${symbols[*]}" || prompt_rsegment 235 default "${symbols[*]}"
+	fi
 }
 
-# Display current virtual environment
-prompt_virtualenv() {
-  if [[ -n $VIRTUAL_ENV ]]; then
-    color=cyan
-    prompt_segment $color $PRIMARY_FG
-    print -Pn " $(basename $VIRTUAL_ENV) "
-  fi
+# Return code names. If no match, then use return code number.
+prompt_retsig() {
+	case $retcode in
+			-1)  retcode="FATAL(-1)" ;;
+			1)   retcode="WARN(1)" ;;
+			2)   retcode="BUILTINMISUSE(2)" ;;
+			19)  retcode="STOP(19)" ;;
+			20)  retcode="TSTP(20)" ;;
+			21)  retcode="TTIN(21)" ;;
+			22)  retcode="TTOU(22)" ;;
+			126) retcode="CCANNOTINVOKE(126)" ;;
+			127) retcode="CNOTFOUND(127)" ;;
+			129) retcode="HUP(129)" ;;
+			130) retcode="INT(130)" ;;
+			131) retcode="QUIT(131)" ;;
+			132) retcode="ILL(132)" ;;
+			134) retcode="ABRT(134)" ;;
+			136) retcode="FPE(136)" ;;
+			137) retcode="KILL(137)" ;;
+			139) retcode="SEGV(139)" ;;
+			141) retcode="PIPE(141)" ;;
+			143) retcode="TERM(143)" ;;
+	esac
 }
 
-## Main prompt
-prompt_agnoster_main() {
-  RETVAL=$?
-  CURRENT_BG='NONE'
-  for prompt_segment in "${AGNOSTER_PROMPT_SEGMENTS[@]}"; do
-    [[ -n $prompt_segment ]] && $prompt_segment
-  done
+# Message of the day
+prompt_motd() {
+	[ -n "$SSH_CLIENT" ] && print "### [SSH] You have logged into $HOST ###" # SSH message
+	strftime -s hour %H $EPOCHSECONDS # Get hour of day
+	local greeting
+	# Display a greeting for the time of day. A random greeting is chosen from the array.
+	(( $hour >= 3  && $hour <= 6  )) && greeting=(Yawn "Rise and shine" "Back to bed?")
+	(( $hour >= 6  && $hour <= 12 )) && greeting=("Good morning" Morning Hello Hi)
+	(( $hour >= 12 && $hour <= 18 )) && greeting=("Good afternoon" Afternoon Greetings Hi Howdy Yo)
+	(( $hour >= 18 && $hour <= 3  )) && greeting=("Good evening" Evening "What's up" Hey Yo)
+	print "$greeting[RANDOM % $#greeting + 1] $USERNAME welcome to zsh $ZSH_VERSION"
+	# Show todo.txt todo list
+	local todotxt="$ZSH"/todo.txt/todo.txt
+	[[ -f "$todotxt" &&  -s "$todotxt" ]] && { print TODO: && <"$todotxt" }
 }
 
-prompt_agnoster_precmd() {
-  vcs_info
-  PROMPT='%{%f%b%k%}$(prompt_agnoster_main) '
+# Evaluate command
+prompt_preexec() {
+	typeset -ghi nextcmd lastcmd
+	((nextcmd++))
+	[ -n "$RPROMPT_CMDTIME" ] && typeset -g timer_sec=${timer_sec:-$EPOCHSECONDS}
 }
 
-prompt_agnoster_setup() {
-  autoload -Uz add-zsh-hook
-  autoload -Uz vcs_info
-
-  prompt_opts=(cr subst percent)
-
-  add-zsh-hook precmd prompt_agnoster_precmd
-
-  zstyle ':vcs_info:*' enable git
-  zstyle ':vcs_info:*' check-for-changes false
-  zstyle ':vcs_info:git*' formats '%b'
-  zstyle ':vcs_info:git*' actionformats '%b (%a)'
+# Execute before prompt
+prompt_precmd() {
+	typeset -g retcode=$? # Store return code
+	typeset -g jobnum=$#jobstates # Number of jobs
+	((nextcmd==lastcmd)) && unset retcode nextcmd lastcmd || ((lastcmd=nextcmd)) # Unset retcode if buffer is empty
+	# Command time
+	if [[ -n "$RPROMPT_CMDTIME" && -n $timer_sec ]]; then
+		local timer_diff
+		((timer_diff=EPOCHREALTIME-timer_sec))
+		typeset -g timer_result
+		read -r timer_result < <(printf '%.*f\n' 1 ${timer_diff}) # 1 decimal
+		unset timer_sec
+	fi
+	# Tab and window title
+	if [ "$USER" != "$DEFAULTUSER" ]; then
+		print -Pn "\e]1;%n: %c\a"
+		print -Pn "\e]2;%n: %c\a"
+	elif [ -n "$SSH_CLIENT" ]; then
+		print -Pn "\e]1;%n@%m: %c\a"
+		print -Pn "\e]2;%n@%m: %c\a"
+	else
+		print -Pn "\e]1;%c\a"
+		print -Pn "\e]2;%c\a"
+	fi
 }
 
-prompt_agnoster_setup "$@"
+# Build prompt
+prompt_build() {
+	prompt_context
+	prompt_venv
+	prompt_dir
+	prompt_git
+	prompt_end
+}
+
+# Build rprompt
+rprompt_build() {
+	prompt_status
+	prompt_rend
+}
+
+# Setup the things
+prompt_setup() {
+	autoload -Uz add-zsh-hook colors && colors
+	add-zsh-hook preexec prompt_preexec
+	add-zsh-hook precmd prompt_precmd
+	[ -n "$RPROMPT_ON" ] && zmodload zsh/parameter # For use in job number count
+	[ -n "$RPROMPT_CLOCKTICK" ] && zmodload zsh/sched # Schedule for ticking clock
+	[[ -n "$RPROMPT_CMDTIME" || -n "$PROMPT_MOTD" ]] && zmodload zsh/datetime # For use in command time and motd
+	[ "$USER" != "$DEFAULTUSER" ] && autoload -Uz _shrinkpath # Load shrinkpath function for other users
+
+	# Display motd under prompt. Duration of message is set in TMOUT.
+	[[ -n "$PROMPT_MOTD" && $UID -ne 0 ]] && deploymsg "$(prompt_motd)" # Function from fpath
+
+	# Refresh prompt for ticking clock
+	if [[ -n "$RPROMPT_CLOCK" && -n "$RPROMPT_CLOCKTICK" ]]; then
+		schedprompt() {
+			#emulate -L zsh
+			local -i i=${"${(@)zsh_scheduled_events#*:*:}"[(I)schedprompt]}
+			((i)) && sched -$i
+			# Reset prompt unless a condition is met
+			[[ $ZLE_STATE = *complete*delete-char*history*insert*list*overwrite*search*compwaitingdots* \
+				|| -n $paste || -n $__searching || -n $dmsg ]] || { zle && zle .reset-prompt }
+			sched +1 schedprompt
+		}
+		schedprompt
+	fi
+
+	# Clear motd after timeout
+	if [ ! -z $dmsg ]; then
+		TMOUT=7 # Timeout for TRAPALRM in sec
+		TRAPALRM() {
+			[ -n "$RPROMPT_CLOCKTICK" ] && unset dmsg # Continue reset-prompt in schedprompt
+			zle -M "" # Clear motd
+			unset TMOUT
+		}
+	fi
+
+	# Ctrl-C
+	if [[ -n "$RPROMPT_RETURN" || -n "$RPROMPT_CLOCKTICK" ]]; then
+		TRAPINT() {
+			[ -n $paste ] && unset paste
+			[ -n $retcode ] && unset retcode
+			[ -n $__searching ] && unset __searching
+			local ret
+			((ret=128+$1))
+			return ret # Restore return status
+		}
+	fi
+
+	# Prompts
+	PROMPT='%{%f%b%k%}$(prompt_build)'
+	RPROMPT='%{%f%b%k%}$(rprompt_build)'
+}
+
+prompt_setup "$@"
