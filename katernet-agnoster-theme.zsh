@@ -248,11 +248,10 @@ prompt_setup() {
 	# Refresh prompt for ticking clock
 	if [[ -n "$RPROMPT_CLOCK" && -n "$RPROMPT_CLOCKTICK" ]]; then
 		schedprompt() {
-			#emulate -L zsh
 			local -i i=${"${(@)zsh_scheduled_events#*:*:}"[(I)schedprompt]}
 			((i)) && sched -$i
 			# Reset prompt unless a condition is met
-			[[ $ZLE_STATE = *complete*delete-char*history*insert*list*overwrite*search*compwaitingdots* \
+			[[ $ZLE_STATE = *(complete|delete|history|insert|list|overwrite|search)* \
 				|| -n $paste || -n $__searching || -n $dmsg ]] || { zle && zle .reset-prompt }
 			sched +1 schedprompt
 		}
@@ -260,11 +259,11 @@ prompt_setup() {
 	fi
 
 	# Clear motd after timeout
-	if [ ! -z $dmsg ]; then
+	if [[ -n "$PROMPT_MOTD" && -n $dmsg ]]; then
 		TMOUT=7 # Timeout for TRAPALRM in sec
 		TRAPALRM() {
 			[ -n "$RPROMPT_CLOCKTICK" ] && unset dmsg # Continue reset-prompt in schedprompt
-			zle -M "" # Clear motd
+			[[ $WIDGET = *complete* ]] || zle -M "" # Clear motd
 			unset TMOUT
 		}
 	fi
