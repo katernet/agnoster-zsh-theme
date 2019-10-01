@@ -4,7 +4,6 @@
 local PROMPT_GIT=y 		# Prompt git status
 local PROMPT_VENV=y		# Prompt virtual environment
 local PROMPT_MOTD=y		# Prompt message of the day
-local PROMPT_RJOB=y		# Prompt random job
 local RPROMPT_ON=y		# Right prompt
 local RPROMPT_CLOCK=y		# Right prompt 24H clock
 local RPROMPT_CLOCKTICK=y	# Right prompt ticking clock
