@@ -201,7 +201,6 @@ prompt_motd() {
 		(($hour >= 12 && $hour < 18)) && greeting=("Good afternoon" Afternoon Greetings Hi)
 		(($hour >= 0 && $hour < 3)) || (($hour >= 18 && $hour <= 23)) && greeting=("Good evening" Evening Hey "What's up")
 		print "$greeting[RANDOM % $#greeting + 1] $USERNAME welcome to zsh"
-		print "Look at the world, life itself is reason enough to exist. There's no meaning apart from the one we give it." # https://www.youtube.com/watch?v=-3frA_rj918&lc=UgxI05A4qsf77LylQ8p4AaABAg.8Whn3pcr1mA8n4H4rMvrV8
 	fi
 	# Show todo.txt todo list
 	local todotxt="$ZSH"/todo.txt/todo.txt
