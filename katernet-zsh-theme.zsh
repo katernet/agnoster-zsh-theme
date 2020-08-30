@@ -1,151 +1,196 @@
-# Adapted from agnoster ZSH theme https://github.com/agnoster/agnoster-zsh-theme
+# Katernet zsh prompt theme
+# Adapted from spaceship-prompt https://github.com/denysdovhan/spaceship-prompt and agnoster https://github.com/agnoster/agnoster-zsh-theme
 
-# Prompt options - To disable an option remove 'y'
-local PROMPT_GIT=y 		# Prompt git status
-local PROMPT_VENV=y		# Prompt virtual environment
-local PROMPT_MOTD=y		# Prompt message of the day
-local RPROMPT_ON=y		# Right prompt
-local RPROMPT_CLOCK=y		# Right prompt 24H clock
-local RPROMPT_CLOCKTICK=y	# Right prompt ticking clock
-local RPROMPT_CMDTIME=y 	# Right prompt command time
-local RPROMPT_HISTORY=y		# Right prompt history line
-local RPROMPT_RETURN=y 		# Right prompt return code
-local RPROMPT_RETURNSIG=y	# Right prompt return signal
+# Prompt options
+# For more feature options see https://github.com/katernet/dotfiles
+local PROMPT_CLOCK=y			   # Prompt clock - y: 24H clock 12: 12H clock
+local PROMPT_HISTLINE=y			   # Prompt history line number
+local PROMPT_ICONS=y 			   # Prompt glyph icons
+local PROMPT_TRANSIENT=y 		   # Transient prompt - Trim previous prompt
+local PROMPT_TRANSIENTOPT=(clock histline) # Transient options: clock, histline
+local PROMPT_DIRTRIM=y 			   # Trim prompt dir path
+local PROMPT_DIRLOCK=y 			   # Prompt dir lock icon for unwriteable folders
+local PROMPT_DOCKER=y 			   # Docker module
+local PROMPT_GIT=y 			   # Git module
+local PROMPT_BOLD=y 			   # Prompt bold font
+local PROMPT_TITLES=y 			   # Prompt theme tab titles
+local PROMPT_CLOCKTICK=y 		   # Ticking clock
+local PROMPT_EXIT=y 			   # Prompt error color - resets after 3s
+local RPROMPT_CMDTIME=y 		   # Right prompt command time
+local RPROMPT_EXITCODE=y 		   # Right prompt exit code
+local RPROMPT_EXITSIG=y 		   # Right prompt exit signal
 
-# Begin a segment
-# Takes two arguments, background and foreground. If omitted, renders default background/foreground.
-prompt_segment() {
-	[ -n "$SSH_CLIENT" ] && typeset -g SEGMENT_SEPARATOR='\u27e9' || typeset -g SEGMENT_SEPARATOR='\ue0b0'
-	local bg fg
-	[ -n $1 ] && bg="%K{$1}" || bg="%k"
-	[ -n $2 ] && fg="%F{$2}" || fg="%f"
-	if [[ -n $CURRENT_BG && $1 != "$CURRENT_BG" ]]; then
-		[ -n "$SSH_CLIENT" ] && print -n " %{$bg%F{$1}%}$SEGMENT_SEPARATOR%{$fg%} " || print -n " %{$bg%F{$CURRENT_BG}%}$SEGMENT_SEPARATOR%{$fg%} "
-	else
-		[[ "$USER" = "$DEFAULTUSER" && -z "$SSH_CLIENT" ]] && print -n "%{$bg%}%{$fg%} " || print -n "%{$bg%}%{$fg%}"
+# Begin a section
+# If foreground argument is omitted, renders default foreground.
+prompt_section() {
+	local fg
+	local prefixcol="white"
+	[ -n $1 ] && fg="%F{$1}" || fg="%f"
+	if [[ -n $3 && -n "$PROMPT_PREFIX" ]]; then
+		[ $3 = "dir" ] && print -n "%F{$prefixcol}in %f"
+		[ $3 = "docker" ] && print -n "%F{$prefixcol}on %f"
+		[ $3 = "git" ] && print -n "%F{$prefixcol}on %f"
 	fi
-	typeset -g CURRENT_BG=$1
-	[ -n $3 ] && echo -n "$3"
+	[ -n "$PROMPT_BOLD" ] && print -n "%B"
+	print -n "%{$fg%}"
+	[ -n $2 ] && print -n "$2 "
+	[[ -n "$PROMPT_PREFIX" && $3 == "context" ]] && print -n "%F{$prefixcol}at %f"
+	[ -n "$PROMPT_BOLD" ] && print -n "%b"
 }
 
-# Begin an rprompt segment
-prompt_rsegment() {
-	[ -n "$SSH_CLIENT" ] && typeset -g RSEGMENT_SEPARATOR='\u27e8' || typeset -g RSEGMENT_SEPARATOR='\ue0b2'
-	local bg fg
-	[ -n $1 ] && bg="%K{$1}" || bg="%k"
-	[ -n $2 ] && fg="%F{$2}" || fg="%f"
-	if [[ -n $CURRENT_BG && $1 != "$CURRENT_BG" ]]; then
-		print -n "%{%K{$CURRENT_BG}%F{$1}%}$RSEGMENT_SEPARATOR%{$bg%}%{$fg%} "
-	else
-		print -n "%F{$1}%{%K{default}%}$RSEGMENT_SEPARATOR%{$bg%}%{$fg%} "
+# Begin an rprompt section
+prompt_rsection() {
+	local fg
+	local prefixcol="245"
+	[ -n $1 ] && fg="%F{$1}" || fg="%f"
+	if [[ -n $3 && -n "$PROMPT_PREFIX" ]]; then
+		[ $3 = "docker" ] && print -n "%F{$prefixcol} on%f"
+		[ $3 = "git" ] && print -n "%F{$prefixcol} on%f"
 	fi
-	typeset -g CURRENT_BG=$1
-	[ -n $3 ] && echo -n "$3"
-	print -n "%E" # Draw segment over space at rprompt EOL
+	[ -n "$PROMPT_BOLD" ] && print -n "%B"
+	print -n "%{$fg%}"
+	[ -n $2 ] && print -n " $2"
+	[ -n "$PROMPT_BOLD" ] && print -n "%b"
 }
 
-# End the prompt closing any open segments and set the prompt
+# End the prompt closing open sections and set the prompt
 prompt_end() {
-	[ -n $CURRENT_BG ] && print -n " %{%k%F{$CURRENT_BG}%}$SEGMENT_SEPARATOR" || print -n "%{%k%}"
-	if [[ -n "$RPROMPT_RETURN" || $retcode -eq 0 ]]; then
-		print -n "%{%f%} %# "
-	else
-		print -n "%F{9} %# %f"
+	if [[ -n "$PROMPT_EXIT" && $exitcode -eq 0 ]] || [[ -z "$PROMPT_EXIT" ]] || [ $errchar = "off" ]; then
+		[ -z "$PROMPT_CHARCOL" ] && local PROMPT_CHARCOL=default
+		[ -n "$PROMPT_CHAR" ] && print -n "%{%F{"$PROMPT_CHARCOL"}%}$PROMPT_CHAR %f" || \
+			print -n "%F{"$PROMPT_CHARCOL"}%# %f"
+	elif [[ -n "$PROMPT_EXIT" && $exitcode -gt 0 ]]; then
+		[ -n "$PROMPT_CHAR" ] && print -n "%{%F{9}%}$PROMPT_CHAR %f" || print -n "%F{9}%# %f"
 	fi
-	unset CURRENT_BG
-}
-
-# End rprompt closing any open segments
-prompt_rend() {
-	[ -n $CURRENT_BG ] && print -n "%{%k%}"
-	unset CURRENT_BG
 }
 
 # User and hostname
 prompt_context() {
-	[ -n "$SSH_CLIENT" ] && prompt_segment black default "%n@%m" && return # SSH - User and hostname
-	[ "$USER" != "$DEFAULTUSER" ] && prompt_segment black default "%n" # Other user - Show user
+	[ "$PROMPT_CONTEXT" = "u" ] && prompt_section default "%n" # User
+	[[ -n "$PROMPT_PREFIX" && "$PROMPT_CONTEXT" = "y" ]] && prompt_section default "%n" context && prompt_section default "%m" # User & Host
+	[[ -z "$PROMPT_PREFIX" && "$PROMPT_CONTEXT" = "y" ]] && prompt_section default "%n@%m" # User@Host
+	[[ "$USER" != "$DEFAULTUSER" && "$PROMPT_CONTEXT" == "o" ]] && prompt_section default "%n" # Other user
 }
 
 # Current directory
 prompt_dir() {
-	# Truncated paths from shrinkpath function in fpath
-	[ -n "$SSH_CLIENT" ] && prompt_segment default cyan $(_shrinkpath) && return
-	if [ ! -w "${PWD}" ]; then # Directory not writable
-		prompt_segment cyan black "$(_shrinkpath) \uf023" # lock icon
+	# Trimmed path from trm function in fpath
+	local dirargs=()
+	[ -z "$PROMPT_DIRCOLOR" ] && local PROMPT_DIRCOLOR=cyan
+	if [[ ! -w "${PWD}" && -n "$PROMPT_DIRLOCK" ]]; then # Directory not writable
+		if [ -n "$PROMPT_DIRTRIM" ]; then
+			dirargs+=($PROMPT_DIRCOLOR "$(trm)${lockicon}")
+		else
+			dirargs+=($PROMPT_DIRCOLOR "%~${lockicon}")
+		fi
 	else
-		prompt_segment cyan black "$(_shrinkpath)"
+		if [ -n "$PROMPT_DIRTRIM" ]; then
+			dirargs+=($PROMPT_DIRCOLOR $(trm))
+		else
+			dirargs+=($PROMPT_DIRCOLOR %~)
+		fi
+	fi
+	[[ -n "$PROMPT_CONTEXT" && -z "$VIRTUAL_ENV" ]] && dirargs+=(dir)
+	prompt_section "${dirargs[@]}"
+	unset PROMPT_DIRCOLOR
+}
+
+# Clock
+prompt_clock() {
+	if [[ -n "$PROMPT_CLOCK" && -z "$RPROMPT_CLOCK" ]]; then
+		[ "$PROMPT_CLOCK" = "y" ]  && prompt_section 249 '%D{%H:%M:%S}'
+		[ "$PROMPT_CLOCK" = "12" ] && prompt_section 249 '%D{%I:%M:%S}'
 	fi
 }
 
-# Virtual environment name
+# History line
+prompt_hist() {
+	[[ -n "$PROMPT_HISTLINE" && -z "$RPROMPT_HISTLINE" && -n "$histline" ]] && prompt_section 245 "%h"
+}
+
+# Python virtual environment name
 prompt_venv() {
 	if [ -n "$PROMPT_VENV" ]; then
-		[ -n "$VIRTUAL_ENV" ] && prompt_segment cyan black "[${VIRTUAL_ENV##*/}]"
-	fi
-}
-
-# Git tracking and local status with git-prompt async plugin
-prompt_git() {
-	(($+commands[git])) || return # Stop host without git from continuing
-	[ $UID -eq 0 ] && return # No git prompt for root user
-	if [[ -n "$PROMPT_GIT" && "$gitrepo" == "true" ]]; then
-		if [[ -n "$gitdirty" ]]; then # Dirty
-			[ -n "$SSH_CLIENT" ] && print -n " %F{yellow}%}$(gitprompt)%{%f%}" && return
-			prompt_segment yellow black
-		else # Clean
-			[ -n "$SSH_CLIENT" ] && print -n " %F{green}%}$(gitprompt)%{%f%}" && return
-			prompt_segment green black
+		[ -z "$PROMPT_DIRCOLOR" ] && local PROMPT_DIRCOLOR=cyan
+		if [ -n "$VIRTUAL_ENV" ]; then
+			local venvargs=()
+			venvargs+=($PROMPT_DIRCOLOR "[${VIRTUAL_ENV##*/}]")
+			[ -n "$PROMPT_CONTEXT" ] && venvargs+=(dir)
+			prompt_section "${venvargs[@]}"
 		fi
-		if [[ -e "./.git/BISECT_LOG" ]]; then
-			print -n "\uf977 " # script icon
-		elif [[ -e "./.git/MERGE_HEAD" ]]; then
-			print -n "\ue727 " # merge icon
-		elif [[ -e "./.git/rebase" || -e "./.git/rebase-apply" || -e "./.git/rebase-merge" || -e "./.git/../.dotest" ]]; then
-			print -n "\uf1c0 " # database icon
-		else
-			print -n "\ue725 " # branch icon
-		fi
-		print -n "$(gitprompt)" # git-prompt plugin
 	fi
 }
 
-# Git dirty/clean status
-prompt_git_dirty() {
-	typeset -g gitdirty
-	read -r gitdirty <&$1 # Read fd
-	zle && zle .reset-prompt
-	zle -F $1 # Call handler
-	exec {1}<&- # Close fd
-}
-
-# Return code, cmd time, history line, job status, clock
-prompt_status() {
-	[ -n "$RPROMPT_ON" ] || return
-   local symbols=()
-	if [[ -n "$RPROMPT_RETURN" && -n $retcode && $retcode -ne 0 ]]; then # Return code
-		[[ -n "$RPROMPT_RETURNSIG" && -z "$SSH_CLIENT" ]] && prompt_retsig
-		[ -n "$SSH_CLIENT" ] && prompt_rsegment default 1 "\u21aa$retcode " || prompt_rsegment 1 11 "\u21aa$retcode "
-	fi
-	if [[ -n "$RPROMPT_CMDTIME" && -z $nocmdtime ]]; then # Command time (nocmdtime from accept-line widget)
-		[ -n "$SSH_CLIENT" ] && local clockicon='' || local clockicon='\uf017 '
-		prompt_humantime $timer_result
-		[[ $timer_result -ge 3 && $timer_result -lt 15 ]] && symbols+=("%F{249}$clockicon${humant}")
-		[[ $timer_result -ge 15 ]] && symbols+=("%F{249}$clockicon%F{9}$humant") # Red time
-	fi
-	if [ -n "$RPROMPT_HISTORY" ]; then # History line
-		[ -n "$SSH_CLIENT" ] && prompt_rsegment default 245 "%h " || prompt_rsegment 245 default "%h "
-	fi
-	[ -n "$RPROMPT_CLOCK" ] && symbols+=("%F{249}%D{%H:%M:%S}") # 24H clock
-	if [ -n "$SSH_CLIENT" ]; then
-		[ "$jobnum" -gt 0 ] && symbols+=("[$jobnum]") # Number of jobs
+# Docker machine context
+prompt_dockercontext() {
+	local docker_remote_context
+	if [ -n $DOCKER_MACHINE_NAME ]; then
+		docker_remote_context="$DOCKER_MACHINE_NAME"
+	elif [ -n $DOCKER_HOST ]; then
+		# Remove protocol (tcp://) and port number from displayed Docker host
+		local parstring=${DOCKER_HOST#*//}
+		docker_remote_context=${parstring%:*}
 	else
-		[ "$jobnum" -eq 1 ] && symbols+=("%F{252}\uf013%f") # 1 job
-		[ "$jobnum" -gt 1 ] && symbols+=("%F{252}\uf085%f") # >1 job
+		# Current docker context, ignoring the local "default" context.
+		docker_remote_context=$(docker context ls --format '{{if .Current}}{{if ne .Name "default"}}{{.Name}}{{end}}{{end}}' 2>/dev/null | tr -d '\n')
 	fi
-	if [ -n "${symbols[*]}" ]; then
-		[ -n "$SSH_CLIENT" ] && prompt_rsegment default 23 "${symbols[*]}" || prompt_rsegment 235 default "${symbols[*]}"
+	[ -z $docker_remote_context ] && return
+	print -n "${docker_remote_context}"
+}
+
+# Docker
+prompt_docker() {
+	[ -n "$PROMPT_DOCKER" ] || return
+	# Better support for docker environment vars: https://docs.docker.com/compose/reference/envvars/
+	local compose_exists=false
+	if [ -n "$COMPOSE_FILE" ]; then
+		# Use COMPOSE_PATH_SEPARATOR or colon as default
+		local separator=${COMPOSE_PATH_SEPARATOR:-":"}
+		# COMPOSE_FILE may have several filenames separated by colon, test all of them
+		local filenames=("${(@ps/$separator/)COMPOSE_FILE}")
+		for filename in $filenames; do
+			if [[ ! -f $filename ]]; then
+				compose_exists=false
+				break
+			fi
+			compose_exists=true
+		done
+		# Must return if COMPOSE_FILE is present but invalid
+		[ "$compose_exists" = false ] && return
 	fi
+	local docker_context="$(prompt_dockercontext)"
+	# Show Docker status only for Docker-specific folders or when connected to external host
+	[[ "$compose_exists" == true || -f Dockerfile || -f docker-compose.yml || -f /.dockerenv || -n $docker_context ]] || return
+	$PROMPT_SECTIONCMD cyan "${dockericon}[${docker_context}]" docker
+}
+
+# Git status with git-prompt async plugin
+prompt_git() {
+	(($+commands[git])) || return # Git not installed
+	[ $UID -eq 0 ] && return # No git prompt for root user
+	[[ -n "$PROMPT_GIT" && "$GITREPO" == "true" ]] && $PROMPT_SECTIONCMD default "$(gitprompt)" git
+}
+
+# Status for clock, cmd time, history line, job status, exit code.
+prompt_status() {
+   local symbols=()
+	if [ -n "$RPROMPT_EXITCODE" ] && [ "$exitcode" -gt 0 ]; then # Exit code
+		[ -n "$RPROMPT_EXITSIG" ] && prompt_exitsig
+		prompt_rsection 160 "${exiticon}${exitcode}"
+	fi
+	[[ -n "$RPROMPT_HISTLINE" && -n $BUFFER && -n "$histline" ]] && prompt_rsection 245 "%h" # History line
+	if [[ -n "$RPROMPT_CMDTIME" && -z "$nocmdtime" ]]; then # Command time (nocmdtime from prompt_accept-line)
+		prompt_humantime $timer_result
+		[ -n "$PROMPT_PREFIX" ] && local prefix="took " || local prefix=$clockicon
+		[[ "$timer_result" -ge 5 && "$timer_result" -lt 10 ]] && symbols+=("%F{249}${prefix}$humant")
+		[[ "$timer_result" -ge 15 && "$timer_result" -lt 30 ]] && symbols+=("%F{249}${prefix}%F{166}$humant") # Orange time
+		[[ "$timer_result" -ge 30 ]] && symbols+=("%F{249}${prefix}%F{160}$humant") # Red time
+	fi
+	[ "$RPROMPT_CLOCK" = "y" ] && symbols+=("%F{249}%D{%H:%M:%S}") # 24H clock
+	[ "$RPROMPT_CLOCK" = 12 ] && symbols+=("%F{249}%D{%I:%M:%S}")  # 12H clock
+	[[ -n "$PROMPT_ICONS" && "$jobnum" -eq 1 ]] && symbols+=("%F{252}${jobicon}%f")
+	[[ -n "$PROMPT_ICONS" && "$jobnum" -gt 1 ]] && symbols+=("%F{252}${jobsicon}%f") # >1 job
+	[ -n "${symbols[*]}" ] && prompt_rsection 235 "${symbols[*]}"
 }
 
 # Convert time to a human readable format - Adapted from https://github.com/sindresorhus/pretty-time-zsh
@@ -163,75 +208,61 @@ prompt_humantime() {
 	humant=$human
 }
 
-# Return code names. If no match, then use return code number.
-prompt_retsig() {
-	case $retcode in
-			-1)  retcode="FATAL(-1)" ;;
-			1)   retcode="WARN(1)" ;;
-			2)   retcode="BUILTINMISUSE(2)" ;;
-			19)  retcode="STOP(19)" ;;
-			20)  retcode="TSTP(20)" ;;
-			21)  retcode="TTIN(21)" ;;
-			22)  retcode="TTOU(22)" ;;
-			126) retcode="CCANNOTINVOKE(126)" ;;
-			127) retcode="CNOTFOUND(127)" ;;
-			129) retcode="HUP(129)" ;;
-			130) retcode="INT(130)" ;;
-			131) retcode="QUIT(131)" ;;
-			132) retcode="ILL(132)" ;;
-			134) retcode="ABRT(134)" ;;
-			136) retcode="FPE(136)" ;;
-			137) retcode="KILL(137)" ;;
-			139) retcode="SEGV(139)" ;;
-			141) retcode="PIPE(141)" ;;
-			143) retcode="TERM(143)" ;;
+# Return exit code names. If no match, then use exit code number.
+prompt_exitsig() {
+	case $exitcode in
+			-1)  exitcode="FATAL(-1)" ;;
+			1)   exitcode="WARN(1)" ;;
+			2)   exitcode="BUILTINMISUSE(2)" ;;
+			19)  exitcode="STOP(19)" ;;
+			20)  exitcode="TSTP(20)" ;;
+			21)  exitcode="TTIN(21)" ;;
+			22)  exitcode="TTOU(22)" ;;
+			126) exitcode="CCANNOTINVOKE(126)" ;;
+			127) exitcode="CNOTFOUND(127)" ;;
+			129) exitcode="HUP(129)" ;;
+			130) exitcode="INT(130)" ;;
+			131) exitcode="QUIT(131)" ;;
+			132) exitcode="ILL(132)" ;;
+			134) exitcode="ABRT(134)" ;;
+			136) exitcode="FPE(136)" ;;
+			137) exitcode="KILL(137)" ;;
+			139) exitcode="SEGV(139)" ;;
+			141) exitcode="PIPE(141)" ;;
+			143) exitcode="TERM(143)" ;;
 	esac
 }
 
-# Message of the day
-prompt_motd() {
-	[ -n "$SSH_CLIENT" ] && print "### [SSH] You have logged into $HOST ###" # SSH message
-	if [[ $1 == "+greeting" ]]; then
-		strftime -s hour %H $EPOCHSECONDS # Get hour of day
-		local greeting
-		# Display a greeting for the time of day. A random greeting is chosen from the array.
-		(($hour >= 3  && $hour < 6)) && greeting=(Yawn "Back to bed?")
-		(($hour >= 6  && $hour < 8)) && greeting=("Good morning" "Rise and shine")
-		(($hour >= 8  && $hour < 12)) && greeting=("Good morning" Morning Hello Howdy)
-		(($hour >= 12 && $hour < 18)) && greeting=("Good afternoon" Afternoon Greetings Hi)
-		(($hour >= 0 && $hour < 3)) || (($hour >= 18 && $hour <= 23)) && greeting=("Good evening" Evening Hey "What's up")
-		print "$greeting[RANDOM % $#greeting + 1] $USERNAME welcome to zsh"
-	fi
-	# Show todo.txt todo list
-	local todotxt="$ZSH"/todo.txt/todo.txt
-	while read line; do # Store each line of todo list in an array
-	    arr+=("$line")
-	done < "$todotxt"
-	if [[ -s "$todotxt" && -n "${arr[1]// }" ]]; then # File size not zero and first line not empty
-		print " "; print "TODO:"
-		for i in "${arr[@]}"; do
-			print "$i"
-		done
-	fi
+# Reset prompt error color
+prompt_exitreset() {
+	typeset -g errchar=off
+	read -r exitreset <&$1 # Read fd
+	zle && builtin zle reset-prompt # Reset prompt
+	zle -F $1 # Call handler
+	exec {1}<&- # Close fd
 }
 
 # Evaluate command
 prompt_preexec() {
 	typeset -ghi nextcmd lastcmd
-	((nextcmd++))
-	[ -n "$RPROMPT_CMDTIME" ] && typeset -g timer_sec=${timer_sec:-$EPOCHSECONDS}
+	((nextcmd++)) # Next command initiated
+	[ -n "$RPROMPT_CMDTIME" ] && typeset -g timer_sec=${timer_sec:-$EPOCHSECONDS} # Start command timer
+	[ -n $BUFFER ] && typeset -g histline=y # Zle buffer set - Enable histline
 }
 
-# Execute before prompt
+# Execute before next prompt
 prompt_precmd() {
-	typeset -g retcode=$? # Store return code
-	typeset -g jobnum=$#jobstates # Number of jobs
-	[[ -n "$PROMPT_GIT" && (($+commands[git])) ]] && { typeset -g gitrepo; read -r gitrepo < <(git rev-parse --is-inside-work-tree 2> /dev/null) } # Test if inside a git repo
-	((nextcmd==lastcmd)) && unset retcode nextcmd lastcmd || ((lastcmd=nextcmd)) # Unset retcode if buffer is empty
-	# Async git dirty status - Achieves prompt responsivness in large repos
-	if [[ -n "$PROMPT_GIT" && (($+commands[git])) && "$gitrepo" == "true" ]]; then
-		exec {FD}< <(git status -s) # Initialize file descriptor fd and fork git status
-		zle -F $FD prompt_git_dirty # Handle input from fd
+	typeset -g exitcode=$? # Store prompt exit code
+	typeset -g jobnum=$#jobstates # Store job number
+	((nextcmd==lastcmd)) && unset exitcode nextcmd lastcmd || ((lastcmd=nextcmd)) # Unset exitcode on next buffer
+	# Start async timer for error prompt color reset
+	if [ -n "$PROMPT_EXIT" ]; then
+		if [ "$exitcode" -gt 0 ]; then
+			typeset -g errchar=on
+			! type zselect > /dev/null && zmodload zsh/zselect # Load timer module
+			exec {FD1}< <(zselect -t 300) # Initialize file descriptor and fork timer - 3s
+			zle -F $FD1 prompt_exitreset # Handle input from fd
+		fi
 	fi
 	# Command time
 	if [[ -n "$RPROMPT_CMDTIME" && -n $timer_sec ]]; then
@@ -242,31 +273,45 @@ prompt_precmd() {
 		unset timer_sec
 	fi
 	# Tab and window title
-	if [ "$USER" != "$DEFAULTUSER" ]; then
-		print -Pn "\e]1;%n: %c\a"
-		print -Pn "\e]2;%n: %c\a"
-	elif [ -n "$SSH_CLIENT" ]; then
-		print -Pn "\e]1;%n@%m: %c\a"
-		print -Pn "\e]2;%n@%m: %c\a"
-	else
-		print -Pn "\e]1;%c\a"
-		print -Pn "\e]2;%c\a"
+	if [ -n "$PROMPT_TITLES" ]; then
+		if [ "$PROMPT_CONTEXT" = "u" ]; then
+			print -Pn "\e]1;%n %c\a"
+			print -Pn "\e]2;%n %c $0\a"
+		elif [ "$PROMPT_CONTEXT" = "uh" ]; then
+			print -Pn "\e]1;%n@%m: %c\a"
+			print -Pn "\e]2;%n@%m: %c $0\a"
+		elif [[ "$PROMPT_CONTEXT" == "o" && "$USER" != "$DEFAULTUSER" ]]; then
+			print -Pn "\e]1;%n: %c\a"
+			print -Pn "\e]2;%n: %c $0\a"
+		else
+			[ "$UID" = 0 ] && print -Pn "\e]1;# %c\a" || print -Pn "\e]1;%c\a"
+			[ "$UID" = 0 ] && print -Pn "\e]2;# %c -${0##*/}\a" || print -Pn "\e]2;%c $0\a"
+		fi
 	fi
+}
+
+# Execute at shell exit
+prompt_exit() {
+	[[ -n "$PROMPT_RJOB" && -n "$jpid" ]] && kill $jpid # Kill disowned job from fpath
 }
 
 # Build prompt
 prompt_build() {
+	[ "$1" != "noclock" ] && prompt_clock
 	prompt_context
 	prompt_venv
 	prompt_dir
-	prompt_git
+	[ -z "$RPROMPT_MODULES" ] && prompt_docker
+	[ -z "$RPROMPT_MODULES" ] && prompt_git
 	prompt_end
 }
 
 # Build rprompt
-rprompt_build() {
+prompt_rbuild() {
+	[ -n "$RPROMPT_OFF" ] && return
+	[ -n "$RPROMPT_MODULES" ] && prompt_docker
+	[ -n "$RPROMPT_MODULES" ] && prompt_git
 	prompt_status
-	prompt_rend
 }
 
 # Setup the things
@@ -274,56 +319,93 @@ prompt_setup() {
 	autoload -Uz add-zsh-hook colors && colors
 	add-zsh-hook preexec prompt_preexec
 	add-zsh-hook precmd prompt_precmd
-	[[ -n "$RPROMPT_CMDTIME" || -n "$PROMPT_MOTD" ]] && ! type strftime > /dev/null && { zmodload zsh/datetime } # Time module for cmdtime and motd
-	[ "$USER" != "$DEFAULTUSER" ] && autoload -Uz _shrinkpath # Load shrinkpath function for other users
-
-	# Display motd under prompt - function from fpath. Duration of message is set by TMOUT.
-	if [[ -n "$PROMPT_MOTD" && $UID -ne 0 && ${TTY: -1} -eq 0 ]]; then
-		if [ -n "$delaymotd" ]; then
-			deploymsg @sleep:$delaymotd "$(prompt_motd +greeting)"
-		else
-			deploymsg "$(prompt_motd +greeting)"
-		fi
+	add-zsh-hook zshexit prompt_exit
+	[ -n "$RPROMPT_CMDTIME" ] && ! type strftime > /dev/null && zmodload zsh/datetime # Load time module for cmdtime
+	ZLE_RPROMPT_INDENT=0 # Set right prompt margin to 0
+	# Set module prompt section command
+	typeset -g PROMPT_SECTIONCMD
+	[ -n "$RPROMPT_MODULES" ] && PROMPT_SECTIONCMD="prompt_rsection" || PROMPT_SECTIONCMD="prompt_section"
+	# Glyphs
+	[[ -n $SSH_TTY ]] && unset PROMPT_ICONS # No glyph icons in an SSH session
+	if [ -n "$PROMPT_ICONS" ]; then
+		typeset -g lockicon=" \uf023"		# Padlock
+		typeset -g dockericon="\uf308 "	# Whale
+		typeset -g exiticon="\u21aa"		# Return
+		typeset -g clockicon="\uf017 "	# Clock
+		typeset -g jobicon="\uf013"		# Cog
+		typeset -g jobsicon="\uf085"		# Cogs
+		typeset -g giticons=y				# Enable gitprompt icons
 	fi
-
-	# Refresh prompt for ticking clock
-	if [[ -n "$RPROMPT_ON" && -n "$RPROMPT_CLOCK" && -n "$RPROMPT_CLOCKTICK" ]]; then
+	# Custom accept-line widget to assist with prompt tasks
+	prompt_accept-line() {
+		# Handle prompt vars
+		[ -n "$paste" ] 			&& unset paste
+		[ -n "$timer_result" ]	&& unset timer_result
+		[ -n "$__searching" ] 	&& unset __searching
+		[ -n "$dirmsg" ] 			&& unset dirmsg
+		[ -n "$dm" ] 				&& unset dm
+		[[ -z $BUFFER && -n $histline ]] && unset histline
+		[[ -n $BUFFER && -z $histline ]]	&& typeset -g histline=y
+		# Transient prompt
+		if [ -n "$PROMPT_TRANSIENT" ]; then
+			local oldPS1="$PS1"
+			local TPS1
+			[[ $PROMPT_TRANSIENTOPT =~ "clock" ]]    && TPS1+='$(prompt_clock)'
+			[[ $PROMPT_TRANSIENTOPT =~ "histline" ]] && TPS1+='$(prompt_hist)'
+			local errchar=off
+			TPS1+='$(prompt_end)'
+			PS1=$TPS1
+			builtin zle reset-prompt
+			unset TPS1
+			PS1="$oldPS1"
+		# Hist line on previous executed prompt
+		elif [[ -n $BUFFER ]]; then
+			local oldPS1="$PS1"
+			PS1='$(prompt_clock)$(prompt_hist)$(prompt_build noclock)'
+			builtin zle reset-prompt
+			PS1="$oldPS1"
+		fi
+		# Blacklist commands from CMDTIME
+		local prog="(sudo -s|suroot|hist|htop|fe|fcd|fkill|oa)"
+		local head="(micro|m |nano|vi|vim|man|ssh|tmux|top|fcd|wtch)*"
+		local tail="*(fzy|less)"
+		if [[ $BUFFER =~ ${prog} || $BUFFER == ${~head} || $BUFFER == ${~tail} ]]; then
+			typeset -g nocmdtime=y
+		else
+			[ -n "$nocmdtime" ] && unset nocmdtime
+		fi
+		[ -n "$PROMPT_EXPALIAS" ] && zle _expand_alias # Expand aliases
+		zle .accept-line # Run builtin accept-line
+	}
+	zle -N accept-line prompt_accept-line
+	# Refresh prompt each second to tick clock
+	# Adapted from https://www.zsh.org/mla/users/2007/msg00946.html
+	if [ -n "$PROMPT_CLOCKTICK" ] && [[ -n "$PROMPT_CLOCK" || -n "$RPROMPT_CLOCK" ]]; then
 		schedprompt() {
+			local saved_exitcode=$?
 			local -i i=${"${(@)zsh_scheduled_events#*:*:}"[(I)schedprompt]}
+			emulate -L zsh
 			((i)) && sched -$i
 			# Reset prompt unless a condition is met
-			[[ $WIDGET = *(complete|delete|list|search)* || $ZLE_STATE = *(history|insert|overwrite)* \
-				|| -n $paste || -n $__searching || -n $dmsg || -n $delaymotd ]] || { zle && zle .reset-prompt }
+			[[ $WIDGET == *(complete|delete|list|search|statusline)* || $ZLE_STATE == *(history|insert|overwrite)* \
+				|| -n $statusline || -n "$paste" || -n "$__searching" || -n "$dm" || -n "$dirmsg" ]] || { zle && builtin zle reset-prompt }
 			sched +1 schedprompt # 1s schedule
+			return $saved_exitcode # Retore prompt exit code
 		}
 		schedprompt
 	fi
-
-	# Clear motd after timeout
-	if [[ -n "$PROMPT_MOTD" && -n "$dmsg" ]]; then
-		TMOUT=10 # Timeout for TRAPALRM in sec
-		TRAPALRM() {
-			[ -n "$RPROMPT_CLOCKTICK" ] && unset dmsg # Continue reset-prompt in schedprompt
-			[[ -n "$SSH_CLIENT" || $WIDGET = *complete* || -n $delaymotd ]] || zle -M "" # Clear motd
-			unset TMOUT
-		}
-	fi
-
 	# Ctrl-C
-	if [[ -n "$RPROMPT_RETURN" || -n "$RPROMPT_CLOCKTICK" ]]; then
+	if [[ -n "$RPROMPT_EXITCODE" || -n "$RPROMPT_CLOCKTICK" ]]; then
 		TRAPINT() {
-			[ -n "$paste" ] && unset paste
-			[ -n "$retcode" ] && unset retcode
+			[ -n "$paste" ]       && unset paste
+			[ -n "$exitcode" ]    && unset exitcode
 			[ -n "$__searching" ] && unset __searching
-			local ret
-			((ret=128+$1))
-			return ret # Restore return status
+			return $((128+$1))
 		}
 	fi
-
 	# Prompt
-	PROMPT='%{%f%b%k%}$(prompt_build)'
-	RPROMPT='%{%f%b%k%}$(rprompt_build)'
+	PROMPT='$(prompt_build)'
+	RPROMPT='$(prompt_rbuild)'
 }
 
 prompt_setup "$@"
